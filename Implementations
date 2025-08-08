@@ -1,0 +1,759 @@
+""" Molecular module for the Classical Quantum Biophysics (CQBP) framework.
+This module provides classes for representing molecules, proteins, and their interactions in the CQBP framework. """
+import numpy as np 
+from typing import Dict, List, Tuple, Union, Optional, Callable, Set 
+from scipy.spatial.distance import cdist 
+from .core import Field, System 
+from .fields import ElectrostaticField, StericField, MolecularField
+
+class Atom: """ Representation of an atom in a molecular system. """
+def __init__(self, element: str, position: np.ndarray, charge: float = 0.0, 
+             mass: float = None, radius: float = None):
+    """
+    Initialize an Atom.
+    
+    Parameters
+    ----------
+    element : str
+        Chemical element symbol
+    position : np.ndarray
+        3D coordinates of the atom
+    charge : float, optional
+        Partial charge of the atom
+    mass : float, optional
+        Atomic mass
+    radius : float, optional
+        Van der Waals radius
+    """
+    self.element = element
+    self.position = np.array(position, dtype=float)
+    self.charge = charge
+    
+    # Set default values based on element if not provided
+    if mass is None:
+        self.mass = ATOMIC_MASSES.get(element, 1.0)
+    else:
+        self.mass = mass
+        
+    if radius is None:
+        self.radius = VDW_RADII.get(element, 1.5)
+    else:
+        self.radius = radius
+    
+    self.properties = {}  # Additional properties
+
+def distance_to(self, other: 'Atom') -> float:
+    """
+    Calculate the distance to another atom.
+    
+    Parameters
+    ----------
+    other : Atom
+        The other atom
+        
+    Returns
+    -------
+    float
+        Distance between the atoms
+    """
+    return np.linalg.norm(self.position - other.position)
+
+def __repr__(self) -> str:
+    """String representation of the atom."""
+    return f"Atom({self.element}, position={self.position}, charge={self.charge})"
+class Bond: """ Representation of a chemical bond between atoms. """
+def __init__(self, atom1_idx: int, atom2_idx: int, order: float = 1.0, 
+             bond_type: str = "single"):
+    """
+    Initialize a Bond.
+    
+    Parameters
+    ----------
+    atom1_idx : int
+        Index of the first atom in the molecule's atom list
+    atom2_idx : int
+        Index of the second atom in the molecule's atom list
+    order : float, optional
+        Bond order (1.0 for single, 2.0 for double, etc.)
+    bond_type : str, optional
+        Type of the bond (single, double, triple, aromatic)
+    """
+    self.atom1_idx = atom1_idx
+    self.atom2_idx = atom2_idx
+    self.order = order
+    self.bond_type = bond_type
+    self.properties = {}  # Additional properties
+
+def __repr__(self) -> str:
+    """String representation of the bond."""
+    return f"Bond({self.atom1_idx}-{self.atom2_idx}, order={self.order}, type={self.bond_type})"
+class Molecule: """ Representation of a molecule as a collection of atoms and bonds. """
+def __init__(self, name: str = ""):
+    """
+    Initialize a Molecule.
+    
+    Parameters
+    ----------
+    name : str, optional
+        Name of the molecule
+    """
+    self.name = name
+    self.atoms = []
+    self.bonds = []
+    self.properties = {}  # Additional molecular properties
+
+def add_atom(self, atom: Atom) -> int:
+    """
+    Add an atom to the molecule.
+    
+    Parameters
+    ----------
+    atom : Atom
+        The atom to add
+        
+    Returns
+    -------
+    int
+        Index of the added atom
+    """
+    self.atoms.append(atom)
+    return len(self.atoms) - 1
+
+def add_bond(self, atom1_idx: int, atom2_idx: int, order: float = 1.0, 
+             bond_type: str = "single") -> int:
+    """
+    Add a bond between two atoms.
+    
+    Parameters
+    ----------
+    atom1_idx : int
+        Index of the first atom
+    atom2_idx : int
+        Index of the second atom
+    order : float, optional
+        Bond order
+    bond_type : str, optional
+        Type of the bond
+        
+    Returns
+    -------
+    int
+        Index of the added bond
+    """
+    if atom1_idx >= len(self.atoms) or atom2_idx >= len(self.atoms):
+        raise ValueError("Atom index out of range")
+    
+    bond = Bond(atom1_idx, atom2_idx, order, bond_type)
+    self.bonds.append(bond)
+    return len(self.bonds) - 1
+
+def get_adjacency_matrix(self) -> np.ndarray:
+    """
+    Get the adjacency matrix of the molecular graph.
+    
+    Returns
+    -------
+    np.ndarray
+        Adjacency matrix where entry (i,j) is the bond order between atoms i and j
+    """
+    n = len(self.atoms)
+    adjacency = np.zeros((n, n))
+    
+    for bond in self.bonds:
+        adjacency[bond.atom1_idx, bond.atom2_idx] = bond.order
+        adjacency[bond.atom2_idx, bond.atom1_idx] = bond.order
+        
+    return adjacency
+
+def get_distance_matrix(self) -> np.ndarray:
+    """
+    Get the matrix of interatomic distances.
+    
+    Returns
+    -------
+    np.ndarray
+        Matrix where entry (i,j) is the distance between atoms i and j
+    """
+    positions = np.array([atom.position for atom in self.atoms])
+    return cdist(positions, positions)
+
+def get_atom_positions(self) -> np.ndarray:
+    """
+    Get the positions of all atoms.
+    
+    Returns
+    -------
+    np.ndarray
+        Array of shape (n, 3) containing atomic positions
+    """
+    return np.array([atom.position for atom in self.atoms])
+
+def get_atom_charges(self) -> np.ndarray:
+    """
+    Get the charges of all atoms.
+    
+    Returns
+    -------
+    np.ndarray
+        Array of shape (n,) containing atomic charges
+    """
+    return np.array([atom.charge for atom in self.atoms])
+
+def get_atom_radii(self) -> np.ndarray:
+    """
+    Get the van der Waals radii of all atoms.
+    
+    Returns
+    -------
+    np.ndarray
+        Array of shape (n,) containing atomic radii
+    """
+    return np.array([atom.radius for atom in self.atoms])
+
+def get_center_of_mass(self) -> np.ndarray:
+    """
+    Calculate the center of mass of the molecule.
+    
+    Returns
+    -------
+    np.ndarray
+        3D coordinates of the center of mass
+    """
+    positions = np.array([atom.position for atom in self.atoms])
+    masses = np.array([atom.mass for atom in self.atoms])
+    return np.sum(positions * masses[:, np.newaxis], axis=0) / np.sum(masses)
+
+def translate(self, vector: np.ndarray) -> 'Molecule':
+    """
+    Translate the molecule by a vector.
+    
+    Parameters
+    ----------
+    vector : np.ndarray
+        Translation vector
+        
+    Returns
+    -------
+    Molecule
+        The translated molecule (self)
+    """
+    for atom in self.atoms:
+        atom.position += vector
+    return self
+
+def rotate(self, rotation_matrix: np.ndarray, center: np.ndarray = None) -> 'Molecule':
+    """
+    Rotate the molecule around a center point.
+    
+    Parameters
+    ----------
+    rotation_matrix : np.ndarray
+        3x3 rotation matrix
+    center : np.ndarray, optional
+        Center of rotation (default: center of mass)
+        
+    Returns
+    -------
+    Molecule
+        The rotated molecule (self)
+    """
+    if center is None:
+        center = self.get_center_of_mass()
+        
+    for atom in self.atoms:
+        # Translate to origin, rotate, and translate back
+        atom.position = np.dot(rotation_matrix, atom.position - center) + center
+        
+    return self
+
+def to_electrostatic_field(self, dielectric_constant: float = 1.0) -> ElectrostaticField:
+    """
+    Convert the molecule to an electrostatic field.
+    
+    Parameters
+    ----------
+    dielectric_constant : float, optional
+        Dielectric constant of the medium
+        
+    Returns
+    -------
+    ElectrostaticField
+        Electrostatic field of the molecule
+    """
+    positions = self.get_atom_positions()
+    charges = self.get_atom_charges()
+    return ElectrostaticField(positions, charges, dielectric_constant, name=f"{self.name}_electrostatic")
+
+def to_steric_field(self, softness: float = 1.0) -> StericField:
+    """
+    Convert the molecule to a steric field.
+    
+    Parameters
+    ----------
+    softness : float, optional
+        Parameter controlling the softness of the steric boundary
+        
+    Returns
+    -------
+    StericField
+        Steric field of the molecule
+    """
+    positions = self.get_atom_positions()
+    radii = self.get_atom_radii()
+    return StericField(positions, radii, softness, name=f"{self.name}_steric")
+
+def get_neighbors(self, atom_idx: int) -> List[int]:
+    """
+    Get the indices of atoms bonded to a given atom.
+    
+    Parameters
+    ----------
+    atom_idx : int
+        Index of the atom
+        
+    Returns
+    -------
+    List[int]
+        Indices of neighboring atoms
+    """
+    neighbors = []
+    for bond in self.bonds:
+        if bond.atom1_idx == atom_idx:
+            neighbors.append(bond.atom2_idx)
+        elif bond.atom2_idx == atom_idx:
+            neighbors.append(bond.atom1_idx)
+    return neighbors
+
+def get_fragments(self) -> List['Molecule']:
+    """
+    Split the molecule into connected fragments.
+    
+    Returns
+    -------
+    List[Molecule]
+        List of molecular fragments
+    """
+    n = len(self.atoms)
+    if n == 0:
+        return []
+        
+    # Build adjacency list
+    adjacency_list = [[] for _ in range(n)]
+    for bond in self.bonds:
+        adjacency_list[bond.atom1_idx].append(bond.atom2_idx)
+        adjacency_list[bond.atom2_idx].append(bond.atom1_idx)
+    
+    # Find connected components using BFS
+    visited = [False] * n
+    fragments = []
+    
+    for start in range(n):
+        if visited[start]:
+            continue
+            
+        # BFS to find connected component
+        component = []
+        queue = [start]
+        visited[start] = True
+        
+        while queue:
+            atom_idx = queue.pop(0)
+            component.append(atom_idx)
+            
+            for neighbor in adjacency_list[atom_idx]:
+                if not visited[neighbor]:
+                    visited[neighbor] = True
+                    queue.append(neighbor)
+        
+        # Create fragment molecule
+        fragment = Molecule(f"{self.name}_fragment_{len(fragments)}")
+        
+        # Add atoms to fragment
+        atom_map = {}  # Maps original atom indices to new indices
+        for i, atom_idx in enumerate(component):
+            atom = self.atoms[atom_idx]
+            new_idx = fragment.add_atom(Atom(
+                atom.element, atom.position.copy(), atom.charge, atom.mass, atom.radius
+            ))
+            atom_map[atom_idx] = new_idx
+        
+        # Add bonds to fragment
+        for bond in self.bonds:
+            if bond.atom1_idx in component and bond.atom2_idx in component:
+                fragment.add_bond(
+                    atom_map[bond.atom1_idx], 
+                    atom_map[bond.atom2_idx],
+                    bond.order, 
+                    bond.bond_type
+                )
+        
+        fragments.append(fragment)
+    
+    return fragments
+
+def __repr__(self) -> str:
+    """String representation of the molecule."""
+    return f"Molecule({self.name}, atoms={len(self.atoms)}, bonds={len(self.bonds)})"
+class Protein(Molecule): """ Representation of a protein as a specialized molecule with additional structural features. """
+def __init__(self, name: str = ""):
+    """
+    Initialize a Protein.
+    
+    Parameters
+    ----------
+    name : str, optional
+        Name of the protein
+    """
+    super().__init__(name)
+    self.residues = []  # List of residues
+    self.chains = {}    # Dictionary mapping chain IDs to lists of residue indices
+    self.secondary_structure = {}  # Secondary structure assignments
+
+def add_residue(self, residue_name: str, residue_number: int, chain_id: str = "A") -> int:
+    """
+    Add a residue to the protein.
+    
+    Parameters
+    ----------
+    residue_name : str
+        Name of the residue (e.g., "ALA", "GLY")
+    residue_number : int
+        Residue number in the sequence
+    chain_id : str, optional
+        Chain identifier
+        
+    Returns
+    -------
+    int
+        Index of the added residue
+    """
+    residue = {
+        "name": residue_name,
+        "number": residue_number,
+        "chain_id": chain_id,
+        "atom_indices": []
+    }
+    
+    self.residues.append(residue)
+    residue_idx = len(self.residues) - 1
+    
+    # Add to chain
+    if chain_id not in self.chains:
+        self.chains[chain_id] = []
+    self.chains[chain_id].append(residue_idx)
+    
+    return residue_idx
+
+def add_atom_to_residue(self, atom: Atom, residue_idx: int) -> int:
+    """
+    Add an atom to a residue.
+    
+    Parameters
+    ----------
+    atom : Atom
+        The atom to add
+    residue_idx : int
+        Index of the residue
+        
+    Returns
+    -------
+    int
+        Index of the added atom
+    """
+    if residue_idx >= len(self.residues):
+        raise ValueError("Residue index out of range")
+        
+    atom_idx = self.add_atom(atom)
+    self.residues[residue_idx]["atom_indices"].append(atom_idx)
+    
+    return atom_idx
+
+def get_residue_atoms(self, residue_idx: int) -> List[Atom]:
+    """
+    Get all atoms in a residue.
+    
+    Parameters
+    ----------
+    residue_idx : int
+        Index of the residue
+        
+    Returns
+    -------
+    List[Atom]
+        Atoms in the residue
+    """
+    if residue_idx >= len(self.residues):
+        raise ValueError("Residue index out of range")
+        
+    return [self.atoms[idx] for idx in self.residues[residue_idx]["atom_indices"]]
+
+def get_chain_residues(self, chain_id: str) -> List[int]:
+    """
+    Get all residue indices in a chain.
+    
+    Parameters
+    ----------
+    chain_id : str
+        Chain identifier
+        
+    Returns
+    -------
+    List[int]
+        Indices of residues in the chain
+    """
+    return self.chains.get(chain_id, [])
+
+def set_secondary_structure(self, residue_idx: int, ss_type: str) -> None:
+    """
+    Set the secondary structure type for a residue.
+    
+    Parameters
+    ----------
+    residue_idx : int
+        Index of the residue
+    ss_type : str
+        Secondary structure type (e.g., "helix", "sheet", "loop")
+    """
+    if residue_idx >= len(self.residues):
+        raise ValueError("Residue index out of range")
+        
+    self.secondary_structure[residue_idx] = ss_type
+
+def get_backbone_atoms(self) -> List[int]:
+    """
+    Get indices of all backbone atoms (N, CA, C, O).
+    
+    Returns
+    -------
+    List[int]
+        Indices of backbone atoms
+    """
+    backbone_atoms = []
+    backbone_names = {"N", "CA", "C", "O"}
+    
+    for atom_idx, atom in enumerate(self.atoms):
+        if "name" in atom.properties and atom.properties["name"] in backbone_names:
+            backbone_atoms.append(atom_idx)
+            
+    return backbone_atoms
+
+def get_binding_site(self, ligand: Molecule, cutoff: float = 5.0) -> List[int]:
+    """
+    Identify residues in the binding site of a ligand.
+    
+    Parameters
+    ----------
+    ligand : Molecule
+        The bound ligand
+    cutoff : float, optional
+        Distance cutoff for binding site residues
+        
+    Returns
+    -------
+    List[int]
+        Indices of binding site residues
+    """
+    binding_site = set()
+    ligand_positions = ligand.get_atom_positions()
+    
+    # Check each residue for proximity to ligand
+    for residue_idx, residue in enumerate(self.residues):
+        residue_atoms = self.get_residue_atoms(residue_idx)
+        residue_positions = np.array([atom.position for atom in residue_atoms])
+        
+        # Calculate minimum distance to ligand
+        distances = cdist(residue_positions, ligand_positions)
+        min_distance = np.min(distances)
+        
+        if min_distance <= cutoff:
+            binding_site.add(residue_idx)
+            
+    return sorted(list(binding_site))
+
+def get_contact_map(self, cutoff: float = 8.0) -> np.ndarray:
+    """
+    Calculate the residue contact map.
+    
+    Parameters
+    ----------
+    cutoff : float, optional
+        Distance cutoff for contacts
+        
+    Returns
+    -------
+    np.ndarray
+        Binary matrix where entry (i,j) is 1 if residues i and j are in contact
+    """
+    n_residues = len(self.residues)
+    contact_map = np.zeros((n_residues, n_residues), dtype=int)
+    
+    # Calculate CA-CA distances
+    ca_positions = []
+    for residue_idx in range(n_residues):
+        ca_found = False
+        for atom_idx in self.residues[residue_idx]["atom_indices"]:
+            atom = self.atoms[atom_idx]
+            if "name" in atom.properties and atom.properties["name"] == "CA":
+                ca_positions.append(atom.position)
+                ca_found = True
+                break
+        
+        if not ca_found:
+            # Use center of residue if CA not found
+            residue_atoms = self.get_residue_atoms(residue_idx)
+            positions = np.array([atom.position for atom in residue_atoms])
+            ca_positions.append(np.mean(positions, axis=0))
+    
+    # Calculate distances and determine contacts
+    ca_positions = np.array(ca_positions)
+    distances = cdist(ca_positions, ca_positions)
+    
+    contact_map = (distances <= cutoff).astype(int)
+    np.fill_diagonal(contact_map, 0)  # No self-contacts
+    
+    return contact_map
+
+def __repr__(self) -> str:
+    """String representation of the protein."""
+    chain_info = ", ".join([f"{chain}: {len(residues)}" for chain, residues in self.chains.items()])
+    return f"Protein({self.name}, residues={len(self.residues)}, chains=[{chain_info}])"
+class MolecularSystem(System): """ Representation of a molecular system in CQBP. """
+def __init__(self, name: str = ""):
+    """
+    Initialize a MolecularSystem.
+    
+    Parameters
+    ----------
+    name : str, optional
+        Name of the system
+    """
+    super().__init__(name)
+    self.molecules = {}
+    self.interactions = []
+
+def add_molecule(self, name: str, molecule: Molecule) -> None:
+    """
+    Add a molecule to the system.
+    
+    Parameters
+    ----------
+    name : str
+        Name of the molecule
+    molecule : Molecule
+        The molecule to add
+    """
+    self.molecules[name] = molecule
+
+def add_interaction(self, molecule1: str, molecule2: str, 
+                   interaction_type: str, parameters: Dict) -> None:
+    """
+    Add an interaction between molecules.
+    
+    Parameters
+    ----------
+    molecule1 : str
+        Name of the first molecule
+    molecule2 : str
+        Name of the second molecule
+    interaction_type : str
+        Type of interaction
+    parameters : Dict
+        Parameters for the interaction
+    """
+    self.interactions.append({
+        "molecule1": molecule1,
+        "molecule2": molecule2,
+        "type": interaction_type,
+        "parameters": parameters
+    })
+
+def get_all_atoms(self) -> List[Tuple[Atom, str]]:
+    """
+    Get all atoms in the system with their molecule identifiers.
+    
+    Returns
+    -------
+    List[Tuple[Atom, str]]
+        List of (atom, molecule_name) pairs
+    """
+    all_atoms = []
+    for name, molecule in self.molecules.items():
+        for atom in molecule.atoms:
+            all_atoms.append((atom, name))
+    return all_atoms
+
+def to_combined_field(self, field_type: str, **kwargs) -> Field:
+    """
+    Convert the entire system to a combined field.
+    
+    Parameters
+    ----------
+    field_type : str
+        Type of field to create ("electrostatic", "steric", etc.)
+    **kwargs
+        Additional parameters for field creation
+        
+    Returns
+    -------
+    Field
+        Combined field for the system
+    """
+    if field_type == "electrostatic":
+        # Combine all molecules into one electrostatic field
+        all_positions = []
+        all_charges = []
+        
+        for molecule in self.molecules.values():
+            all_positions.extend(molecule.get_atom_positions())
+            all_charges.extend(molecule.get_atom_charges())
+            
+        return ElectrostaticField(
+            np.array(all_positions), 
+            np.array(all_charges),
+            kwargs.get("dielectric_constant", 1.0),
+            name=f"{self.name}_electrostatic"
+        )
+        
+    elif field_type == "steric":
+        # Combine all molecules into one steric field
+        all_positions = []
+        all_radii = []
+        
+        for molecule in self.molecules.values():
+            all_positions.extend(molecule.get_atom_positions())
+            all_radii.extend(molecule.get_atom_radii())
+            
+        return StericField(
+            np.array(all_positions), 
+            np.array(all_radii),
+            kwargs.get("softness", 1.0),
+            name=f"{self.name}_steric"
+        )
+        
+    else:
+        raise ValueError(f"Unsupported field type: {field_type}")
+
+def evolve(self, time_step: float, steps: int = 1):
+    """
+    Evolve the molecular system in time.
+    
+    Parameters
+    ----------
+    time_step : float
+        Time step for evolution
+    steps : int, optional
+        Number of steps to evolve
+        
+    Returns
+    -------
+    MolecularSystem
+        The evolved system
+    """
+    # Placeholder for molecular dynamics or other evolution methods
+    # This would typically involve force calculations and position updates
+    return self
+Constants and reference data
+Atomic masses (in atomic mass units)
+ATOMIC_MASSES = { "H": 1.008, "C": 12.011, "N": 14.007, "O": 15.999, "F": 18.998, "P": 30.974, "S": 32.065, "Cl": 35.453, "Br": 79.904, "I": 126.904 }
+Van der Waals radii (in Angstroms)
+VDW_RADII = { "H": 1.20, "C": 1.70, "N": 1.55, "O": 1.52, "F": 1.47, "P": 1.80, "S": 1.80, "Cl": 1.75, "Br": 1.85, "I": 1.98 }
